@@ -3492,6 +3492,7 @@ class API:
 
         data_dict = data.get('inputs', {})
         LOGGER.debug(data_dict)
+        desired_job_id = data.get("job_id")
 
         subscriber = None
         subscriber_dict = data.get('subscriber')
@@ -3523,6 +3524,7 @@ class API:
                 data_dict,
                 execution_mode=execution_mode,
                 subscriber=subscriber,
+                desired_job_id=desired_job_id,
             )
             job_id, mime_type, outputs, status, additional_headers = result
             headers.update(additional_headers or {})
