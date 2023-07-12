@@ -3550,6 +3550,21 @@ class API:
         data_dict = data.get('inputs', {})
         LOGGER.debug(data_dict)
 
+        # add support for pre 0.11 style parameter passing
+        if type(data_dict) == list:
+            data_dict_as_dict = {}
+            for input in data_dict:
+                id = input['id']
+                value = input['value']
+                if id not in data_dict_as_dict:
+                    data_dict_as_dict[id] = value
+                elif id in data_dict_as_dict and isinstance(data_dict_as_dict[id], list):
+                    data_dict_as_dict[id].append(value)
+                else:
+                    data_dict_as_dict[id] = [data_dict_as_dict[id], value]
+
+            data_dict = data_dict_as_dict
+
         try:
             execution_mode = RequestedProcessExecutionMode(
                 request.headers.get('Prefer', request.headers.get('prefer'))
