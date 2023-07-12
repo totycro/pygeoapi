@@ -312,7 +312,8 @@ class BaseManager:
             self,
             process_id: str,
             data_dict: dict,
-            execution_mode: Optional[RequestedProcessExecutionMode] = None
+            execution_mode: Optional[RequestedProcessExecutionMode] = None,
+            desired_job_id: str | None = None
     ) -> Tuple[str, Any, JobStatus, Optional[Dict[str, str]]]:
         """
         Default process execution handler
@@ -329,7 +330,7 @@ class BaseManager:
                   response
         """
 
-        job_id = str(uuid.uuid1())
+        job_id = desired_job_id or str(uuid.uuid1())
         processor = self.get_processor(process_id)
         if execution_mode == RequestedProcessExecutionMode.respond_async:
             job_control_options = processor.metadata.get(
