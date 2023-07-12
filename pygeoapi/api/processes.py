@@ -403,7 +403,7 @@ def execute_process(api: API, request: APIRequest,
             request.headers.get('Prefer', request.headers.get('prefer'))
         )
     except ValueError:
-        execution_mode = None
+        execution_mode = RequestedProcessExecutionMode.respond_async
     try:
         LOGGER.debug('Executing process')
         result = api.manager.execute_process(
