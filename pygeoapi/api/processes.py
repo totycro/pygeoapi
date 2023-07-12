@@ -375,6 +375,7 @@ def execute_process(api: API, request: APIRequest,
 
     data_dict = data.get('inputs', {})
     LOGGER.debug(data_dict)
+    desired_job_id = data.get("job_id")
 
     requested_outputs = data.get('outputs')
     LOGGER.debug(f'outputs: {requested_outputs}')
@@ -410,7 +411,9 @@ def execute_process(api: API, request: APIRequest,
             process_id, data_dict, execution_mode=execution_mode,
             requested_outputs=requested_outputs,
             subscriber=subscriber,
-            requested_response=requested_response)
+            requested_response=requested_response,
+            desired_job_id=desired_job_id,
+        )
         job_id, mime_type, outputs, status, additional_headers = result
         headers.update(additional_headers or {})
 
