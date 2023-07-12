@@ -375,6 +375,7 @@ def get_jobs(job_id=None):
             return get_response(api_.get_jobs(request, job_id))
 
 
+@BLUEPRINT.route('/processes/<process_id>/jobs', methods=['POST'])
 @BLUEPRINT.route('/processes/<process_id>/execution', methods=['POST'])
 def execute_process_jobs(process_id):
     """
