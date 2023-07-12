@@ -3549,6 +3549,7 @@ class API:
 
         data_dict = data.get('inputs', {})
         LOGGER.debug(data_dict)
+        desired_job_id = data.get("job_id")
 
         try:
             execution_mode = RequestedProcessExecutionMode(
@@ -3559,7 +3560,7 @@ class API:
         try:
             LOGGER.debug('Executing process')
             result = self.manager.execute_process(
-                process_id, data_dict, execution_mode=execution_mode)
+                process_id, data_dict, execution_mode=execution_mode, desired_job_id=desired_job_id)
             job_id, mime_type, outputs, status, additional_headers = result
             headers.update(additional_headers or {})
             headers['Location'] = f'{self.base_url}/jobs/{job_id}'
