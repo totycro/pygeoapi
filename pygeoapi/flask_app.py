@@ -34,10 +34,12 @@ import os
 
 import click
 
-from flask import Flask, Blueprint, make_response, request, send_from_directory
+from flask import (Flask, Blueprint, make_response, request,
+                   send_from_directory, Response, Request)
 
-from pygeoapi.api import API
+from pygeoapi.api import API, APIRequest, apply_gzip
 from pygeoapi.openapi import load_openapi_document
+import pygeoapi.api.processes as processes_api
 from pygeoapi.util import get_mimetype, yaml_load, get_api_rules
 
 
@@ -385,7 +387,8 @@ def execute_process_jobs(process_id):
     :returns: HTTP response
     """
 
-    return get_response(api_.execute_process(request, process_id))
+    return execute_from_flask(processes_api.execute_process, request,
+                              process_id)
 
 
 @BLUEPRINT.route('/jobs/<job_id>/results',
@@ -398,7 +401,22 @@ def get_job_result(job_id=None):
 
     :returns: HTTP response
     """
-    return get_response(api_.get_job_result(request, job_id))
+    return execute_from_flask(processes_api.get_job_result, request, job_id)
+
+
+def execute_from_flask(api_function, request: Request, *args
+                       ) -> Response:
+    api_request = APIRequest.from_flask(request, api_.locales)
+    content: str | bytes
+    if not api_request.is_valid():
+        headers, status, content = api_.get_format_exception(api_request)
+    else:
+
+        headers, status, content = api_function(api_, api_request, *args)
+        content = apply_gzip(headers, content)
+        # handle jsonld too?
+
+    return get_response((headers, status, content))
 
 
 @BLUEPRINT.route('/jobs/<job_id>/results/<resource>',

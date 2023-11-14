@@ -45,13 +45,13 @@ from datetime import datetime, timezone
 from functools import partial
 from gzip import compress
 from http import HTTPStatus
-import json
 import logging
 import re
 from typing import Any, Tuple, Union, Optional
 import urllib.parse
 
 from dateutil.parser import parse as dateparse
+import flask
 from pygeofilter.parsers.ecql import parse as parse_ecql_text
 from pygeofilter.parsers.cql_json import parse as parse_cql_json
 from pyproj.exceptions import CRSError
@@ -66,8 +66,6 @@ from pygeoapi.linked_data import (geojson2jsonld, jsonldify,
 from pygeoapi.log import setup_logger
 from pygeoapi.process.base import (
     JobNotFoundError,
-    JobResultNotFoundError,
-    ProcessorExecuteError,
 )
 from pygeoapi.process.manager.base import get_manager
 from pygeoapi.plugin import load_plugin, PLUGINS
@@ -76,11 +74,11 @@ from pygeoapi.provider.base import (
     ProviderTypeError)
 
 from pygeoapi.models.cql import CQLModel
-from pygeoapi.util import (dategetter, RequestedProcessExecutionMode,
+from pygeoapi.util import (dategetter,
                            DATETIME_FORMAT, UrlPrefetcher,
                            filter_dict_by_key_value, get_provider_by_type,
                            get_provider_default, get_typed_value, JobStatus,
-                           json_serial, render_j2_template, str2bool,
+                           render_j2_template, str2bool,
                            TEMPLATES, to_json, get_api_rules, get_base_url,
                            get_crs_from_uri, get_supported_crs_list,
                            CrsTransformSpec, transform_bbox)
@@ -216,23 +214,30 @@ def gzip(func):
 
     def inner(*args, **kwargs):
         headers, status, content = func(*args, **kwargs)
-        charset = CHARSET[0]
-        if F_GZIP in headers.get('Content-Encoding', []):
-            try:
-                if isinstance(content, bytes):
-                    # bytes means Content-Type needs to be set upstream
-                    content = compress(content)
-                else:
-                    headers['Content-Type'] = \
-                        f"{headers['Content-Type']}; charset={charset}"
-                    content = compress(content.encode(charset))
-            except TypeError as err:
-                headers.pop('Content-Encoding')
-                LOGGER.error(f'Error in compression: {err}')
-
+        content = apply_gzip(headers, content)
         return headers, status, content
 
     return inner
+
+
+def apply_gzip(headers: dict, content: str | bytes) -> str | bytes:
+    """
+    Compress content if requested in header.
+    """
+    charset = CHARSET[0]
+    if F_GZIP in headers.get('Content-Encoding', []):
+        try:
+            if isinstance(content, bytes):
+                # bytes means Content-Type needs to be set upstream
+                content = compress(content)
+            else:
+                headers['Content-Type'] = \
+                    f"{headers['Content-Type']}; charset={charset}"
+                content = compress(content.encode(charset))
+        except TypeError as err:
+            headers.pop('Content-Encoding')
+            LOGGER.error(f'Error in compression: {err}')
+    return content
 
 
 class APIRequest:
@@ -349,11 +354,11 @@ class APIRequest:
         :returns:                   An `APIRequest` instance with data.
         """
 
-        api_req = cls(request, supported_locales)
         if hasattr(request, 'data'):
             # Set data from Flask request
-            api_req._data = request.data
+            return cls.from_flask(request, supported_locales)
         elif hasattr(request, 'body'):
+            api_req = cls(request, supported_locales)
             if 'django' in str(request.__class__):
                 # Set data from Django request
                 api_req._data = request.body
@@ -370,6 +375,16 @@ class APIRequest:
                     api_req._data = loop.run_until_complete(request.body())
                 except ModuleNotFoundError:
                     LOGGER.error('Module nest-asyncio not found')
+            return api_req
+
+    @classmethod
+    def from_flask(cls, request: flask.Request, supported_locales
+                   ) -> 'APIRequest':
+        """
+        Factory class similar to with_data, but only for flask requests
+        """
+        api_req = cls(request, supported_locales)
+        api_req._data = request.data
         return api_req
 
     @staticmethod
@@ -3315,7 +3330,6 @@ class API:
 
         return headers, HTTPStatus.OK, to_json(serialized_jobs,
                                                self.pretty_print)
-
 
     @pre_process
     def delete_job(

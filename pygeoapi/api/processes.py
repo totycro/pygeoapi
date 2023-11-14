@@ -56,7 +56,7 @@ from . import APIRequest, API, SYSTEM_LOCALE, F_JSON, FORMAT_TYPES
 LOGGER = logging.getLogger(__name__)
 
 
-def execute_process(self, request: Union[APIRequest, Any],
+def execute_process(api: API, request: APIRequest,
                     process_id) -> Tuple[dict, int, str]:
     """
     Execute process
@@ -67,15 +67,12 @@ def execute_process(self, request: Union[APIRequest, Any],
     :returns: tuple of headers, status code, content
     """
 
-    if not request.is_valid():
-        return self.get_format_exception(request)
-
     # Responses are always in US English only
     headers = request.get_response_headers(SYSTEM_LOCALE,
-                                           **self.api_headers)
-    if process_id not in self.manager.processes:
+                                           **api.api_headers)
+    if process_id not in api.manager.processes:
         msg = 'identifier not found'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.NOT_FOUND, headers,
             request.format, 'NoSuchProcess', msg)
 
@@ -84,7 +81,7 @@ def execute_process(self, request: Union[APIRequest, Any],
         # TODO not all processes require input, e.g. time-dependent or
         #      random value generators
         msg = 'missing request data'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.BAD_REQUEST, headers, request.format,
             'MissingParameterValue', msg)
 
@@ -101,7 +98,7 @@ def execute_process(self, request: Union[APIRequest, Any],
         # Input does not appear to be valid JSON
         LOGGER.error(err)
         msg = 'invalid request data'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.BAD_REQUEST, headers, request.format,
             'InvalidParameterValue', msg)
 
@@ -116,15 +113,15 @@ def execute_process(self, request: Union[APIRequest, Any],
         execution_mode = None
     try:
         LOGGER.debug('Executing process')
-        result = self.manager.execute_process(
+        result = api.manager.execute_process(
             process_id, data_dict, execution_mode=execution_mode)
         job_id, mime_type, outputs, status, additional_headers = result
         headers.update(additional_headers or {})
-        headers['Location'] = f'{self.base_url}/jobs/{job_id}'
+        headers['Location'] = f'{api.base_url}/jobs/{job_id}'
     except ProcessorExecuteError as err:
         LOGGER.error(err)
         msg = 'Processing error'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.INTERNAL_SERVER_ERROR, headers,
             request.format, 'NoApplicableCode', msg)
 
@@ -144,14 +141,14 @@ def execute_process(self, request: Union[APIRequest, Any],
         http_status = HTTPStatus.OK
 
     if mime_type == 'application/json':
-        response2 = to_json(response, self.pretty_print)
+        response2 = to_json(response, api.pretty_print)
     else:
         response2 = response
 
     return headers, http_status, response2
 
 
-def get_job_result(self, request: Union[APIRequest, Any],
+def get_job_result(api: API, request: APIRequest,
                    job_id) -> Tuple[dict, int, str]:
     """
     Get result of job (instance of a process)
@@ -162,14 +159,12 @@ def get_job_result(self, request: Union[APIRequest, Any],
     :returns: tuple of headers, status code, content
     """
 
-    if not request.is_valid():
-        return self.get_format_exception(request)
     headers = request.get_response_headers(SYSTEM_LOCALE,
-                                           **self.api_headers)
+                                           **api.api_headers)
     try:
-        job = self.manager.get_job(job_id)
+        job = api.manager.get_job(job_id)
     except JobNotFoundError:
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.NOT_FOUND, headers,
             request.format, 'NoSuchJob', job_id
         )
@@ -178,27 +173,27 @@ def get_job_result(self, request: Union[APIRequest, Any],
 
     if status == JobStatus.running:
         msg = 'job still running'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.NOT_FOUND, headers,
             request.format, 'ResultNotReady', msg)
 
     elif status == JobStatus.accepted:
         # NOTE: this case is not mentioned in the specification
         msg = 'job accepted but not yet running'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.NOT_FOUND, headers,
             request.format, 'ResultNotReady', msg)
 
     elif status == JobStatus.failed:
         msg = 'job failed'
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.BAD_REQUEST, headers, request.format,
             'InvalidParameterValue', msg)
 
     try:
-        mimetype, job_output = self.manager.get_job_result(job_id)
+        mimetype, job_output = api.manager.get_job_result(job_id)
     except JobResultNotFoundError:
-        return self.get_exception(
+        return api.get_exception(
             HTTPStatus.INTERNAL_SERVER_ERROR, headers,
             request.format, 'JobResultNotFound', job_id
         )
@@ -217,8 +212,7 @@ def get_job_result(self, request: Union[APIRequest, Any],
                 'result': job_output
             }
             content = render_j2_template(
-                self.config, 'jobs/results/index.html',
+                api.config, 'jobs/results/index.html',
                 data, request.locale)
 
     return headers, HTTPStatus.OK, content
-
