@@ -56,12 +56,6 @@ LOGGER = logging.getLogger(__name__)
 
 
 @pytest.fixture()
-def config():
-    with open(get_test_file_path('pygeoapi-test-config.yml')) as fh:
-        return yaml_load(fh)
-
-
-@pytest.fixture()
 def config_with_rules() -> dict:
     """ Returns a pygeoapi configuration with default API rules. """
     with open(get_test_file_path('pygeoapi-test-config-apirules.yml')) as fh:
@@ -80,17 +74,6 @@ def config_hidden_resources():
     filename = 'pygeoapi-test-config-hidden-resources.yml'
     with open(get_test_file_path(filename)) as fh:
         return yaml_load(fh)
-
-
-@pytest.fixture()
-def openapi():
-    with open(get_test_file_path('pygeoapi-test-openapi.yml')) as fh:
-        return yaml_load(fh)
-
-
-@pytest.fixture()
-def api_(config, openapi):
-    return API(config, openapi)
 
 
 @pytest.fixture()
@@ -113,6 +96,9 @@ def api_hidden_resources(config_hidden_resources, openapi):
 
 
 def test_apirequest(api_):
+    # TODO: adapt to from_webframework() construction style
+    #       if it's accepted
+
     # Test without (valid) locales
     with pytest.raises(ValueError):
         req = mock_request()
@@ -1652,179 +1638,6 @@ def test_describe_processes(config, api_):
     data = json.loads(response)
     assert code == HTTPStatus.OK
     assert len(data['processes']) == 2
-
-
-def test_execute_process(config, api_):
-    req_body_0 = {
-        'inputs': {
-            'name': 'Test'
-        }
-    }
-    req_body_1 = {
-        'inputs': {
-            'name': 'Test'
-        },
-        'response': 'document'
-    }
-    req_body_2 = {
-        'inputs': {
-            'name': 'Tést'
-        }
-    }
-    req_body_3 = {
-        'inputs': {
-            'name': 'Tést',
-            'message': 'This is a test.'
-        }
-    }
-    req_body_4 = {
-        'inputs': {
-            'foo': 'Tést'
-        }
-    }
-    req_body_5 = {
-        'inputs': {}
-    }
-    req_body_6 = {
-        'inputs': {
-            'name': None
-        }
-    }
-
-    cleanup_jobs = set()
-
-    # Test posting empty payload to existing process
-    req = mock_request(data='')
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-    assert rsp_headers['Content-Language'] == 'en-US'
-
-    data = json.loads(response)
-    assert code == HTTPStatus.BAD_REQUEST
-    assert 'Location' not in rsp_headers
-    assert data['code'] == 'MissingParameterValue'
-
-    req = mock_request(data=req_body_0)
-    rsp_headers, code, response = api_.execute_process(req, 'foo')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.NOT_FOUND
-    assert 'Location' not in rsp_headers
-    assert data['code'] == 'NoSuchProcess'
-
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-
-    assert len(data.keys()) == 2
-    assert data['id'] == 'echo'
-    assert data['value'] == 'Hello Test!'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_1)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-
-    assert len(data.keys()) == 1
-    assert data['outputs'][0]['id'] == 'echo'
-    assert data['outputs'][0]['value'] == 'Hello Test!'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_2)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-    assert data['value'] == 'Hello Tést!'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_3)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-    assert data['value'] == 'Hello Tést! This is a test.'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_4)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-    assert data['code'] == 'InvalidParameterValue'
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_5)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-    assert data['code'] == 'InvalidParameterValue'
-    assert data['description'] == 'Error updating job'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_6)
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    data = json.loads(response)
-    assert code == HTTPStatus.OK
-    assert 'Location' in rsp_headers
-    assert data['code'] == 'InvalidParameterValue'
-    assert data['description'] == 'Error updating job'
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_0)
-    rsp_headers, code, response = api_.execute_process(req, 'goodbye-world')
-
-    response = json.loads(response)
-    assert code == HTTPStatus.NOT_FOUND
-    assert 'Location' not in rsp_headers
-    assert response['code'] == 'NoSuchProcess'
-
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    response = json.loads(response)
-    assert code == HTTPStatus.OK
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    req = mock_request(data=req_body_1, HTTP_Prefer='respond-async')
-    rsp_headers, code, response = api_.execute_process(req, 'hello-world')
-
-    assert 'Location' in rsp_headers
-    response = json.loads(response)
-    assert isinstance(response, dict)
-    assert code == HTTPStatus.CREATED
-
-    cleanup_jobs.add(tuple(['hello-world',
-                            rsp_headers['Location'].split('/')[-1]]))
-
-    # Cleanup
-    time.sleep(2)  # Allow time for any outstanding async jobs
-    for _, job_id in cleanup_jobs:
-        rsp_headers, code, response = api_.delete_job(mock_request(), job_id)
-        assert code == HTTPStatus.OK
 
 
 def test_delete_job(api_):

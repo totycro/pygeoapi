@@ -40,6 +40,8 @@ from werkzeug.test import create_environ
 from werkzeug.wrappers import Request
 from werkzeug.datastructures import ImmutableMultiDict
 
+from pygeoapi.api import APIRequest
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -52,7 +54,7 @@ def get_test_file_path(filename: str) -> str:
         return f'tests/{filename}'
 
 
-def mock_request(params: dict = None, data=None, **headers) -> Request:
+def mock_request(params: dict | None = None, data=None, **headers) -> Request:
     """
     Mocks a Request object so the @pre_process decorator can inject it
     as an APIRequest.
@@ -75,6 +77,24 @@ def mock_request(params: dict = None, data=None, **headers) -> Request:
     request = Request(environ)
     request.args = ImmutableMultiDict(params.items())  # noqa
     return request
+
+
+def mock_api_request(params: dict | None = None, data=None, **headers
+                     ) -> APIRequest:
+    """
+    Mocks an APIRequest
+
+    :param params: Optional query parameter dict for the request.
+                   Will be set to {} if omitted.
+    :param data: Optional data/body to send with the request.
+                 Can be text/bytes or a JSON dictionary.
+    :param headers: Optional request HTTP headers to set.
+    :returns: APIRequest instance
+    """
+    return APIRequest.from_flask(
+        mock_request(params=params, data=data, **headers),
+        supported_locales=["en"],
+    )
 
 
 @contextmanager
