@@ -50,6 +50,8 @@ from pygeoapi.process.base import (
     JobResultNotFoundError,
     ProcessorExecuteError,
 )
+from pygeoapi.process.manager.base import get_manager
+from pygeoapi.openapi import OPENAPI_YAML
 
 from . import APIRequest, API, SYSTEM_LOCALE, F_JSON, FORMAT_TYPES
 
@@ -216,3 +218,36 @@ def get_job_result(api: API, request: APIRequest,
                 data, request.locale)
 
     return headers, HTTPStatus.OK, content
+
+
+def get_oas_30_paths(cfg: dict):
+    paths = {}
+
+    process_manager = get_manager(cfg)
+
+    if len(process_manager.processes) > 0:
+        paths['/processes'] = {
+            'get': {
+                'summary': 'Processes',
+                'description': 'Processes',
+                'tags': ['server'],
+                'operationId': 'getProcesses',
+                'parameters': [
+                    {'$ref': '#/components/parameters/f'}
+                ],
+                'responses': {
+                    '200': {'$ref': f"{OPENAPI_YAML['oapip']}/responses/ProcessList.yaml"},  # noqa
+                    'default': {'$ref': '#/components/responses/default'}
+                }
+            }
+        }
+        LOGGER.debug('setting up processes')
+
+        for k, v in process_manager.processes.items():
+            if k.startswith('_'):
+                LOGGER.debug(f'Skipping hidden layer: {k}')
+                continue
+
+            paths[f"/processes/{v}"] = ...
+
+    return paths

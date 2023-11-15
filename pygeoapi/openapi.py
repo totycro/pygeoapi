@@ -51,6 +51,7 @@ from pygeoapi.provider.base import ProviderTypeError, SchemaType
 from pygeoapi.util import (filter_dict_by_key_value, get_provider_by_type,
                            filter_providers_by_type, to_json, yaml_load,
                            get_api_rules, get_base_url)
+import pygeoapi.api.processes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1304,6 +1305,9 @@ def get_oas_30(cfg):
             'description': 'Process jobs',
         }
         oas['tags'].insert(1, tag)
+
+    for api in [pygeoapi.api.processes]:
+        paths.extend(api.get_oas_30_paths())
 
     oas['paths'] = paths
 
