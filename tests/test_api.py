@@ -406,7 +406,7 @@ def test_api_exception(config, api_):
     assert code == HTTPStatus.BAD_REQUEST
 
 
-def test_gzip(config, api_):
+def test_gzip(config, api_, openapi):
     # Requests for each response type and gzip encoding
     req_gzip_json = mock_request(HTTP_ACCEPT=FORMAT_TYPES[F_JSON],
                                  HTTP_ACCEPT_ENCODING=F_GZIP)
@@ -501,7 +501,7 @@ def test_gzip(config, api_):
         gzip.decompress(rsp_gzip_html).decode(enc_16)
 
 
-def test_gzip_csv(config, api_):
+def test_gzip_csv(config, api_, openapi):
     req_csv = mock_request({'f': 'csv'})
     rsp_csv_headers, _, rsp_csv = api_.get_collection_items(req_csv, 'obs')
     assert rsp_csv_headers['Content-Type'] == 'text/csv; charset=utf-8'
@@ -1165,7 +1165,7 @@ def test_manage_collection_item_read_only_options_req(config, api_):
     assert rsp_headers['Allow'] == 'HEAD, GET'
 
 
-def test_manage_collection_item_editable_options_req(config):
+def test_manage_collection_item_editable_options_req(config, openapi):
     """Test OPTIONS request on a editable items endpoint"""
     config = copy.deepcopy(config)
     config['resources']['obs']['providers'][0]['editable'] = True
