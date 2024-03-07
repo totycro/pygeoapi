@@ -43,6 +43,9 @@ PORT = os.environ.get("PYGEOAPI_ORACLE_PORT", "1521")
 
 
 class SqlManipulator:
+    def __init__(self, provider_def):
+        self.provider_def = provider_def
+
     def process_query(
         self,
         db,

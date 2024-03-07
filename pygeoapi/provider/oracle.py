@@ -321,6 +321,7 @@ class OracleProvider(BaseProvider):
         super().__init__(provider_def)
 
         # Table properties
+        self.provider_def = provider_def
         self.table = provider_def["table"]
         self.id_field = provider_def["id_field"]
         self.conn_dic = provider_def["data"]
@@ -707,7 +708,9 @@ class OracleProvider(BaseProvider):
             # SQL manipulation plugin
             if self.sql_manipulator:
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
+                manipulation_class = _class_factory(
+                    self.sql_manipulator, provider_def=self.provider_def,
+                )
                 sql_query, bind_variables = manipulation_class.process_query(
                     db,
                     sql_query,
@@ -1030,7 +1033,9 @@ class OracleProvider(BaseProvider):
             # SQL manipulation plugin
             if self.sql_manipulator:
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
+                manipulation_class = _class_factory(
+                    self.sql_manipulator, provider_def=self.provider_def,
+                )
                 sql_query, bind_variables = manipulation_class.process_create(
                     db,
                     sql_query,
@@ -1125,7 +1130,9 @@ class OracleProvider(BaseProvider):
             # SQL manipulation plugin
             if self.sql_manipulator:
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
+                manipulation_class = _class_factory(
+                    self.sql_manipulator, provider_def=self.provider_def,
+                )
                 sql_query, bind_variables = manipulation_class.process_update(
                     db,
                     sql_query,
@@ -1177,7 +1184,9 @@ class OracleProvider(BaseProvider):
             # SQL manipulation plugin
             if self.sql_manipulator:
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
+                manipulation_class = _class_factory(
+                    self.sql_manipulator, provider_def=self.provider_def,
+                )
                 sql_query, bind_variables = manipulation_class.process_delete(
                     db,
                     sql_query,
