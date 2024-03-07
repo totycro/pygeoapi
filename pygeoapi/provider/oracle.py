@@ -548,6 +548,7 @@ class OracleProvider(BaseProvider):
         q=None,
         language=None,
         filterq=None,
+        extra_params={},
         **kwargs,
     ):
         """
@@ -564,9 +565,14 @@ class OracleProvider(BaseProvider):
         :param skip_geometry: bool of whether to skip geometry (default False)
         :param q: full-text search term(s)
         :param filterq: CQL query as text string
-
+        :param extra_params: Additional parameters added to the
+            query which are not in reserved
+            fieldnames or fields in the oracle table
         :returns: GeoJSON FeaturesCollection
         """
+
+        LOGGER.debug(f"properties contains: {properties}")
+        LOGGER.debug(f"Extra Params contains: {extra_params}")
 
         # Check mandatory filter properties
         property_dict = dict(properties)
@@ -729,6 +735,7 @@ class OracleProvider(BaseProvider):
                     q,
                     language,
                     filterq,
+                    extra_params=extra_params
                 )
 
             # Clean up placeholders that aren't used by the
@@ -744,6 +751,7 @@ class OracleProvider(BaseProvider):
                 cursor.execute(sql_query, bind_variables)
             except oracledb.Error as err:
                 LOGGER.error(f"Error executing sql_query: {sql_query}")
+                LOGGER.error(f"Error with bind_variables: {bind_variables}")
                 LOGGER.error(err)
                 raise ProviderQueryError()
 
@@ -814,7 +822,8 @@ class OracleProvider(BaseProvider):
 
         return id
 
-    def get(self, identifier, crs_transform_spec=None, **kwargs):
+    def get(self, identifier, crs_transform_spec=None, extra_params={},
+            **kwargs):
         """
         Query the provider for a specific
         feature id e.g: /collections/ocrl_lakes/items/1
@@ -882,13 +891,16 @@ class OracleProvider(BaseProvider):
             # SQL manipulation plugin
             if self.sql_manipulator:
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
+                manipulation_class = _class_factory(
+                    self.sql_manipulator, provider_def=self.provider_def,
+                )
                 sql_query, bind_variables = manipulation_class.process_get(
                     db,
                     sql_query,
                     bind_variables,
                     self.sql_manipulator_options,
                     identifier,
+                    extra_params=extra_params,
                 )
 
             LOGGER.debug(f"SQL Query: {sql_query}")

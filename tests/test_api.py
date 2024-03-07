@@ -1157,6 +1157,12 @@ def test_get_collection_items(config, api_):
 
     assert code == HTTPStatus.BAD_REQUEST
 
+    # unknown params will be passed to provider, in this case no effect
+    req = mock_request({'new-get-param': 'foo'})
+    rsp_headers, code, response = api_.get_collection_items(req, 'obs')
+
+    assert code == HTTPStatus.OK
+
 
 def test_get_collection_items_crs(config, api_):
 

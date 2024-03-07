@@ -1599,6 +1599,8 @@ class API:
                                'properties', 'skipGeometry', 'q',
                                'filter', 'filter-lang', 'filter-crs']
 
+        extra_params = {}
+
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
 
@@ -1760,9 +1762,13 @@ class API:
 
         LOGGER.debug('processing property parameters')
         for k, v in request.params.items():
-            if k not in reserved_fieldnames and k in list(p.fields.keys()):
-                LOGGER.debug(f'Adding property filter {k}={v}')
-                properties.append((k, v))
+            if k not in reserved_fieldnames:
+                if k in list(p.fields.keys()):
+                    LOGGER.debug(f'Adding property filter {k}={v}')
+                    properties.append((k, v))
+                else:
+                    LOGGER.debug(f'Adding extra filter {k}={v}')
+                    extra_params[str(k).lower()] = v
 
         LOGGER.debug('processing sort parameter')
         val = request.params.get('sortby')
@@ -1854,6 +1860,7 @@ class API:
         LOGGER.debug(f'datetime: {datetime_}')
         LOGGER.debug(f'properties: {properties}')
         LOGGER.debug(f'select properties: {select_properties}')
+        LOGGER.debug(f'extra_params: {extra_params}')
         LOGGER.debug(f'skipGeometry: {skip_geometry}')
         LOGGER.debug(f'language: {prv_locale}')
         LOGGER.debug(f'q: {q}')
@@ -1869,7 +1876,8 @@ class API:
                               sortby=sortby, skip_geometry=skip_geometry,
                               select_properties=select_properties,
                               crs_transform_spec=crs_transform_spec,
-                              q=q, language=prv_locale, filterq=filter_)
+                              q=q, language=prv_locale, filterq=filter_,
+                              extra_params=extra_params)
         except ProviderGenericError as err:
             LOGGER.error(err)
             return self.get_exception(
