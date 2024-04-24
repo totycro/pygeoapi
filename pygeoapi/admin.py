@@ -241,6 +241,8 @@ class Admin(API):
 
         self.write(data)
 
+        self.config.update(data)
+
         return headers, 204, {}
 
     @pre_process
