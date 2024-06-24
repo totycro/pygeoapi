@@ -264,7 +264,7 @@ class BaseManager:
 
             if self.output_dir is not None:
                 LOGGER.debug(f'writing output to {job_filename}')
-                if isinstance(outputs, dict):
+                if isinstance(outputs, (dict, list)):
                     mode = 'w'
                     data = json.dumps(outputs, sort_keys=True, indent=4)
                     encoding = 'utf-8'
@@ -355,6 +355,8 @@ class BaseManager:
 
         job_id = str(uuid.uuid1())
         processor = self.get_processor(process_id)
+        processor.set_job_id(job_id)
+
         if execution_mode == RequestedProcessExecutionMode.respond_async:
             job_control_options = processor.metadata.get(
                 'jobControlOptions', [])
