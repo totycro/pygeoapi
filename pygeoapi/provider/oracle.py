@@ -695,9 +695,46 @@ class OracleProvider(BaseProvider):
             # because of getFields ...
             sql_query = f"SELECT COUNT(1) AS hits \
                             FROM {self.table} \
-                            {where_dict['clause']}"
+                            {where_dict['clause']} #WHERE#"
+
+            # Assign where_dict["properties"] to bind_variables
+            bind_variables = {**where_dict["properties"]}
+
+            # SQL manipulation plugin
+            if self.sql_manipulator:
+                extra_params["geom"] = self.geom
+                LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
+                manipulation_class = _class_factory(self.sql_manipulator)
+                sql_query, bind_variables = manipulation_class.process_query(
+                    db,
+                    sql_query,
+                    bind_variables,
+                    self.sql_manipulator_options,
+                    offset,
+                    limit,
+                    resulttype,
+                    bbox,
+                    datetime_,
+                    properties,
+                    sortby,
+                    skip_geometry,
+                    select_properties,
+                    crs_transform_spec,
+                    q,
+                    language,
+                    filterq,
+                    extra_params=extra_params
+                )
+
+            # Clean up placeholders that aren't used by the
+            # manipulation class.
+            sql_query = sql_query.replace("#HINTS#", "")
+            sql_query = sql_query.replace("#JOIN#", "")
+            sql_query = sql_query.replace("#WHERE#", "")
+
             try:
-                cursor.execute(sql_query, where_dict["properties"])
+                cursor.execute(sql_query, bind_variables)
+                LOGGER.debug(f"Count Query is {sql_query} with bind_variables {bind_variables}")
             except oracledb.Error as err:
                 LOGGER.error(
                     f"Error executing sql_query: {sql_query}: {err}"
@@ -797,6 +834,7 @@ class OracleProvider(BaseProvider):
 
             # SQL manipulation plugin
             if self.sql_manipulator:
+                extra_params["geom"] = self.geom
                 LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
                 manipulation_class = _class_factory(self.sql_manipulator)
                 sql_query, bind_variables = manipulation_class.process_query(
