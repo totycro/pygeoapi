@@ -734,7 +734,6 @@ class OracleProvider(BaseProvider):
 
             try:
                 cursor.execute(sql_query, bind_variables)
-                LOGGER.debug(f"Count Query is {sql_query} with bind_variables {bind_variables}")
             except oracledb.Error as err:
                 LOGGER.error(
                     f"Error executing sql_query: {sql_query}: {err}"
