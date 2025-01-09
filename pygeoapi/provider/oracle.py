@@ -613,6 +613,35 @@ class OracleProvider(BaseProvider):
 
         return srid
 
+    def _apply_sql_manipulator(
+        self, db, sql_query, bind_variables, extra_params, **query_args
+    ):
+        """
+        Apply the SQL manipulation plugin to process the SQL query.
+
+        :param db: Database connection instance
+        :param sql_query: The SQL query to process
+        :param bind_variables: Query bind variables
+        :param extra_params: Additional parameters for manipulation
+        :param query_args: Other dynamic arguments required for processing
+        :return: Processed SQL query and bind variables
+        """
+        if not self.sql_manipulator:
+            return sql_query, bind_variables
+
+        LOGGER.debug(f"sql_manipulator: {self.sql_manipulator}")
+        manipulation_class = _class_factory(self.sql_manipulator)
+
+        # Pass all arguments to the process_query method
+        return manipulation_class.process_query(
+            db=db,
+            sql_query=sql_query,
+            bind_variables=bind_variables,
+            sql_manipulator_options=self.sql_manipulator_options,
+            **query_args,
+            extra_params=extra_params,
+        )
+
     def query(
         self,
         offset=0,
@@ -700,37 +729,39 @@ class OracleProvider(BaseProvider):
             # Assign where_dict["properties"] to bind_variables
             bind_variables = {**where_dict["properties"]}
 
-            # SQL manipulation plugin
-            if self.sql_manipulator:
-                extra_params["geom"] = self.geom
-                LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
-                sql_query, bind_variables = manipulation_class.process_query(
-                    db,
-                    sql_query,
-                    bind_variables,
-                    self.sql_manipulator_options,
-                    offset,
-                    limit,
-                    resulttype,
-                    bbox,
-                    datetime_,
-                    properties,
-                    sortby,
-                    skip_geometry,
-                    select_properties,
-                    crs_transform_spec,
-                    q,
-                    language,
-                    filterq,
-                    extra_params=extra_params
-                )
+            # Default values for the process_query function (sql_manipulator)
+            default_values = {
+                "offset": None,
+                "limit": None,
+                "resulttype": None,
+                "bbox": None,
+                "datetime_": None,
+                "properties": [],
+                "sortby": [],
+                "skip_geometry": None,
+                "select_properties": [],
+                "crs_transform_spec": None,
+                "q": None,
+                "language": None,
+                "filterq": None,
+            }
 
+            # Prepare the arguments dynamically
+            # Use defaults where variables are not defined
+            query_args = {
+                key: locals().get(key, default) for key, default 
+                in default_values.items()
+            }
+
+            # Apply the SQL manipulation plugin
+            extra_params["geom"] = self.geom
+            sql_query, bind_variables = self._apply_sql_manipulator(
+                db, sql_query, bind_variables, extra_params, **query_args
+            )
+            
             # Clean up placeholders that aren't used by the
             # manipulation class.
-            sql_query = sql_query.replace("#HINTS#", "")
-            sql_query = sql_query.replace("#JOIN#", "")
-            sql_query = sql_query.replace("#WHERE#", "")
+            sql_query = _cleanup_placeholders(sql_query)
 
             try:
                 cursor.execute(sql_query, bind_variables)
@@ -831,37 +862,14 @@ class OracleProvider(BaseProvider):
             # Create dictionary for sql bind variables
             bind_variables = {**where_dict["properties"], **paging_bind}
 
-            # SQL manipulation plugin
-            if self.sql_manipulator:
-                extra_params["geom"] = self.geom
-                LOGGER.debug("sql_manipulator: " + self.sql_manipulator)
-                manipulation_class = _class_factory(self.sql_manipulator)
-                sql_query, bind_variables = manipulation_class.process_query(
-                    db,
-                    sql_query,
-                    bind_variables,
-                    self.sql_manipulator_options,
-                    offset,
-                    limit,
-                    resulttype,
-                    bbox,
-                    datetime_,
-                    properties,
-                    sortby,
-                    skip_geometry,
-                    select_properties,
-                    crs_transform_spec,
-                    q,
-                    language,
-                    filterq,
-                    extra_params=extra_params
-                )
+            # Apply the SQL manipulation plugin
+            sql_query, bind_variables = self._apply_sql_manipulator(
+                db, sql_query, bind_variables, extra_params, **query_args
+            )
 
             # Clean up placeholders that aren't used by the
             # manipulation class.
-            sql_query = sql_query.replace("#HINTS#", "")
-            sql_query = sql_query.replace("#JOIN#", "")
-            sql_query = sql_query.replace("#WHERE#", "")
+            sql_query = _cleanup_placeholders(sql_query)
 
             LOGGER.debug(f"SQL Query: {sql_query}")
             LOGGER.debug(f"Bind variables: {bind_variables}")
@@ -1360,6 +1368,13 @@ class OracleProvider(BaseProvider):
             obj.SDO_ORDINATES.extend(coord)
 
         return obj
+
+
+def _cleanup_placeholders(sql_query):
+    placeholders = ["#HINTS#", "#JOIN#", "#WHERE#"]
+    for placeholder in placeholders:
+        sql_query = sql_query.replace(placeholder, "")
+    return sql_query
 
 
 def _class_factory(

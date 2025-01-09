@@ -38,7 +38,7 @@ from pygeoapi.provider.oracle import OracleProvider, DatabaseConnection
 USERNAME = os.environ.get("PYGEOAPI_ORACLE_USER", "geo_test")
 PASSWORD = os.environ.get("PYGEOAPI_ORACLE_PASSWD", "geo_test")
 SERVICE_NAME = os.environ.get("PYGEOAPI_ORACLE_SERVICE_NAME", "XEPDB1")
-HOST = os.environ.get("PYGEOAPI_ORACLE_HOST", "127.0.0.1")
+HOST = os.environ.get("PYGEOAPI_ORACLE_HOST", "oracledb")
 PORT = os.environ.get("PYGEOAPI_ORACLE_PORT", "1521")
 
 
@@ -70,6 +70,7 @@ class SqlManipulator:
 
         if sql_query.find(" WHERE ") == -1:
             sql_query = sql_query.replace("#WHERE#", f" WHERE {sql}")
+
         else:
             sql_query = sql_query.replace("#WHERE#", f" AND {sql}")
 
@@ -644,6 +645,14 @@ def test_extra_params_are_passed_to_sql_manipulator(config_manipulator):
     assert not response['features']
 
 
+def test_query_count_sql_manipulator(config_manipulator):
+    """Test query number of hits"""
+    p = OracleProvider(config_manipulator)
+    result = p.query(resulttype="hits")
+
+    assert result.get("numberMatched") == 1
+
+
 @pytest.fixture()
 def database_connection_pool(config_db_conn):
     os.environ["ORACLE_POOL_MIN"] = "2"  # noqa: F841
@@ -669,3 +678,5 @@ def test_query_pool(config, database_connection_pool):
     """Test query using a DB Session Pool for a valid JSON object with geometry"""   # noqa
     # Run query test again with session pool
     test_query(config)
+
+
