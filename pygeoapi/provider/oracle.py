@@ -749,7 +749,7 @@ class OracleProvider(BaseProvider):
             # Prepare the arguments dynamically
             # Use defaults where variables are not defined
             query_args = {
-                key: locals().get(key, default) for key, default 
+                key: locals().get(key, default) for key, default
                 in default_values.items()
             }
 
@@ -758,7 +758,7 @@ class OracleProvider(BaseProvider):
             sql_query, bind_variables = self._apply_sql_manipulator(
                 db, sql_query, bind_variables, extra_params, **query_args
             )
-            
+
             # Clean up placeholders that aren't used by the
             # manipulation class.
             sql_query = _cleanup_placeholders(sql_query)
