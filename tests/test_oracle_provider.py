@@ -678,5 +678,3 @@ def test_query_pool(config, database_connection_pool):
     """Test query using a DB Session Pool for a valid JSON object with geometry"""   # noqa
     # Run query test again with session pool
     test_query(config)
-
-
