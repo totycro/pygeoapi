@@ -38,7 +38,7 @@ from pygeoapi.provider.oracle import OracleProvider, DatabaseConnection
 USERNAME = os.environ.get("PYGEOAPI_ORACLE_USER", "geo_test")
 PASSWORD = os.environ.get("PYGEOAPI_ORACLE_PASSWD", "geo_test")
 SERVICE_NAME = os.environ.get("PYGEOAPI_ORACLE_SERVICE_NAME", "XEPDB1")
-HOST = os.environ.get("PYGEOAPI_ORACLE_HOST", "oracledb")
+HOST = os.environ.get("PYGEOAPI_ORACLE_HOST", "127.0.0.1")
 PORT = os.environ.get("PYGEOAPI_ORACLE_PORT", "1521")
 
 
