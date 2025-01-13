@@ -62,6 +62,12 @@ jobs:
         host node port: 9300
         node port: 9300
         discovery type: 'single-node'
+    - name: Install and run OpenSearch 📦
+      uses: esmarkowski/opensearch-github-action@v1.0.0
+      with:
+        version: 2.12.0
+        security-disabled: true
+        port: 9209
     - name: Install and run MongoDB
       uses: supercharge/mongodb-github-action@1.5.0
       with:
@@ -94,12 +100,12 @@ jobs:
         pip3 install -r requirements-manager.txt
         pip3 install -r requirements-django.txt
         python3 setup.py install
-        pip3 install --upgrade "sqlalchemy<2"
         pip3 install --global-option=build_ext --global-option="-I/usr/include/gdal" GDAL==`gdal-config --version`
         #pip3 install --upgrade rasterio==1.1.8
     - name: setup test data ⚙️
       run: |
         python3 tests/load_es_data.py tests/data/ne_110m_populated_places_simple.geojson geonameid
+        python3 tests/load_opensearch_data.py tests/data/ne_110m_populated_places_simple.geojson geonameid
         python3 tests/load_mongo_data.py tests/data/ne_110m_populated_places_simple.geojson
         gunzip < tests/data/hotosm_bdi_waterways.sql.gz | psql postgresql://postgres:${{ secrets.DatabasePassword || 'postgres' }}@localhost:5432/test
         psql postgresql://postgres:${{ secrets.DatabasePassword || 'postgres' }}@localhost:5432/test -f tests/data/dummy_data.sql
@@ -118,6 +124,7 @@ jobs:
         pytest tests/test_csv__provider.py
         pytest tests/test_django.py
         pytest tests/test_elasticsearch__provider.py
+        pytest tests/test_opensearch__provider.py
         pytest tests/test_esri_provider.py
         pytest tests/test_filesystem_provider.py
         pytest tests/test_geojson_provider.py
@@ -136,51 +143,13 @@ jobs:
         pytest tests/test_rasterio_provider.py
         pytest tests/test_sensorthings_provider.py
         pytest tests/test_socrata_provider.py
+        # pytest tests/test_socrata_provider_live.py.py  # NOTE: these are skipped in the file but listed here for completeness
         pytest tests/test_sqlite_geopackage_provider.py
         pytest tests/test_tinydb_catalogue_provider.py
         pytest tests/test_tinydb_manager_for_parallel_requests.py
         pytest tests/test_util.py
         pytest tests/test_xarray_netcdf_provider.py
         pytest tests/test_xarray_zarr_provider.py
-    - name: failed tests 🚩
-      if: ${{ failure() }}
-      run: |
-        pip3 list -v
-
-  admin:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-          - python-version: '3.10'
-    env:
-      PYGEOAPI_CONFIG: "tests/pygeoapi-test-config-admin.yml"
-      PYGEOAPI_OPENAPI: "tests/pygeoapi-test-openapi-admin.yml"
-    steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
-      name: Setup Python ${{ matrix.python-version }}
-      with:
-        python-version: ${{ matrix.python-version }}
-    - uses: awalsh128/cache-apt-pkgs-action@latest
-      with:
-        packages: gunicorn python3-gevent
-        version: 1.0
-    - name: Install requirements 📦
-      run: |
-        pip3 install -r requirements.txt
-        pip3 install -r requirements-dev.txt
-        pip3 install -r requirements-admin.txt
-        python3 setup.py install
-    - name: Run pygeoapi with admin API ⚙️
-      run: |
-        pygeoapi openapi generate ${PYGEOAPI_CONFIG} --output-file ${PYGEOAPI_OPENAPI}
-        gunicorn --bind 0.0.0.0:5000 \
-                 --reload \
-                 --reload-extra-file ${PYGEOAPI_CONFIG} \
-                 pygeoapi.flask_app:APP &
-    - name: run integration tests ⚙️
-      run: |
         pytest tests/test_admin_api.py
     - name: failed tests 🚩
       if: ${{ failure() }}

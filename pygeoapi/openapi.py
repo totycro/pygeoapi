@@ -134,6 +134,95 @@ def gen_response_object(description: str, media_type: str,
     return response
 
 
+def gen_contact(cfg: dict) -> dict:
+    """
+    Generates an OpenAPI contact object with OGC extensions
+    based on OGC API - Records contact
+
+    :param cfg: `dict` of configuration
+
+    :returns: `dict` of OpenAPI contact object
+    """
+
+    has_addresses = False
+    has_phones = False
+
+    contact = {
+        'name': cfg['metadata']['provider']['name']
+    }
+
+    for key in ['url', 'email']:
+        if key in cfg['metadata']['provider']:
+            contact[key] = cfg['metadata']['provider'][key]
+
+    contact['x-ogc-serviceContact'] = {
+        'name': cfg['metadata']['contact']['name'],
+        'addresses': []
+    }
+
+    if 'position' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['position'] = cfg['metadata']['contact']['position']  # noqa
+
+    if any(address in ['address', 'city', 'stateorprovince', 'postalcode', 'country'] for address in cfg['metadata']['contact']):  # noqa
+        has_addresses = True
+
+    if has_addresses:
+        address = {}
+        if 'address' in cfg['metadata']['contact']:
+            address['deliveryPoint'] = [cfg['metadata']['contact']['address']]
+
+        if 'city' in cfg['metadata']['contact']:
+            address['city'] = cfg['metadata']['contact']['city']
+
+        if 'stateorprovince' in cfg['metadata']['contact']:
+            address['administrativeArea'] = cfg['metadata']['contact']['stateorprovince']  # noqa
+
+        if 'postalCode' in cfg['metadata']['contact']:
+            address['administrativeArea'] = cfg['metadata']['contact']['postalCode']  # noqa
+
+        if 'country' in cfg['metadata']['contact']:
+            address['administrativeArea'] = cfg['metadata']['contact']['country']  # noqa
+
+        contact['x-ogc-serviceContact']['addresses'].append(address)
+
+    if any(phone in ['phone', 'fax'] for phone in cfg['metadata']['contact']):
+        has_phones = True
+        contact['x-ogc-serviceContact']['phones'] = []
+
+    if has_phones:
+        if 'phone' in cfg['metadata']['contact']:
+            contact['x-ogc-serviceContact']['phones'].append({
+                'type': 'main', 'value': cfg['metadata']['contact']['phone']
+            })
+
+        if 'fax' in cfg['metadata']['contact']:
+            contact['x-ogc-serviceContact']['phones'].append({
+                'type': 'fax', 'value': cfg['metadata']['contact']['fax']
+            })
+
+    if 'email' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['emails'] = [{
+            'value': cfg['metadata']['contact']['email']
+        }]
+
+    if 'url' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['links'] = [{
+            'type': 'text/html',
+            'href': cfg['metadata']['contact']['url']
+        }]
+
+    if 'instructions' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['contactInstructions'] = cfg['metadata']['contact']['instructions']  # noqa
+
+    if 'hours' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['hoursOfService'] = cfg['metadata']['contact']['hours']  # noqa
+
+    if 'role' in cfg['metadata']['contact']:
+        contact['x-ogc-serviceContact']['hoursOfService'] = cfg['metadata']['contact']['role']  # noqa
+
+    return contact
+
+
 def get_oas_30(cfg: dict, fail_on_invalid_collection: bool = True) -> dict:
     """
     Generates an OpenAPI 3.0 Document
@@ -167,11 +256,7 @@ def get_oas_30(cfg: dict, fail_on_invalid_collection: bool = True) -> dict:
         'x-keywords': l10n.translate(cfg['metadata']['identification']['keywords'], locale_),  # noqa
         'termsOfService':
             cfg['metadata']['identification']['terms_of_service'],
-        'contact': {
-            'name': cfg['metadata']['provider']['name'],
-            'url': cfg['metadata']['provider']['url'],
-            'email': cfg['metadata']['contact']['email']
-        },
+        'contact': gen_contact(cfg),
         'license': {
             'name': cfg['metadata']['license']['name'],
             'url': cfg['metadata']['license']['url']
@@ -467,13 +552,14 @@ def get_oas_30(cfg: dict, fail_on_invalid_collection: bool = True) -> dict:
         schema_dict = get_config_schema()
         oas['definitions'] = schema_dict['definitions']
         LOGGER.debug('Adding admin endpoints')
-        oas['paths'].update(get_admin())
+        oas['paths'].update(get_admin(cfg))
 
     return oas
 
 
 def get_oas_30_parameters(cfg: dict, locale_: str):
     server_locales = l10n.get_locales(cfg)
+
     return {
             'f': {
                 'name': 'f',
@@ -599,7 +685,8 @@ def get_oas_30_parameters(cfg: dict, locale_: str):
                 'description': 'Configuration resource identifier',
                 'required': True,
                 'schema': {
-                    'type': 'string'
+                    'type': 'string',
+                    'default': list(cfg['resources'].keys())[0]
                  }
             }
         }
@@ -624,11 +711,16 @@ def get_config_schema():
         return yaml_load(fh2)
 
 
-def get_admin():
+def get_admin(cfg: dict) -> dict:
 
     schema_dict = get_config_schema()
 
     paths = {}
+
+    res_eg_key = next(iter(cfg['resources']))
+    res_eg = {
+        res_eg_key: cfg['resources'][res_eg_key]
+    }
 
     paths['/admin/config'] = {
         'get': {
@@ -660,6 +752,7 @@ def get_admin():
                 'description': 'Updates admin configuration',
                 'content': {
                     'application/json': {
+                        'example': cfg,
                         'schema': schema_dict
                     }
                 },
@@ -680,6 +773,7 @@ def get_admin():
                 'description': 'Updates admin configuration',
                 'content': {
                     'application/json': {
+                        'example': {'metadata': cfg['metadata']},
                         'schema': schema_dict
                     }
                 },
@@ -722,6 +816,7 @@ def get_admin():
                 'description': 'Adds resource to configuration',
                 'content': {
                     'application/json': {
+                        'example': {'new-collection': cfg['resources'][res_eg_key]}, # noqa
                         'schema': schema_dict['properties']['resources']['patternProperties']['^.*$']  # noqa
                     }
                 },
@@ -768,6 +863,7 @@ def get_admin():
                 'description': 'Updates admin configuration resource',
                 'content': {
                     'application/json': {
+                        'example': res_eg[res_eg_key],
                         'schema': schema_dict['properties']['resources']['patternProperties']['^.*$']  # noqa
                     }
                 },
@@ -791,6 +887,7 @@ def get_admin():
                 'description': 'Updates admin configuration resource',
                 'content': {
                     'application/json': {
+                        'example': {'extents': res_eg[res_eg_key]['extents']},
                         'schema': schema_dict['properties']['resources']['patternProperties']['^.*$']  # noqa
                     }
                 },

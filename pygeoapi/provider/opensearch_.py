@@ -3,7 +3,7 @@
 # Authors: Tom Kralidis <tomkralidis@gmail.com>
 #          Francesco Bartoli <xbartolone@gmail.com>
 #
-# Copyright (c) 2023 Tom Kralidis
+# Copyright (c) 2024 Tom Kralidis
 # Copyright (c) 2024 Francesco Bartoli
 #
 # Permission is hereby granted, free of charge, to any person
@@ -35,8 +35,8 @@ import json
 import logging
 import uuid
 
-from elasticsearch import Elasticsearch, exceptions, helpers
-from elasticsearch_dsl import Search, Q
+from opensearchpy import OpenSearch, helpers
+from opensearch_dsl import Search, Q
 
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
                                     ProviderQueryError,
@@ -48,8 +48,8 @@ from pygeoapi.util import get_envelope, crs_transform
 LOGGER = logging.getLogger(__name__)
 
 
-class ElasticsearchProvider(BaseProvider):
-    """Elasticsearch Provider"""
+class OpenSearchProvider(BaseProvider):
+    """OpenSearch Provider"""
 
     def __init__(self, provider_def):
         """
@@ -57,38 +57,35 @@ class ElasticsearchProvider(BaseProvider):
 
         :param provider_def: provider definition
 
-        :returns: pygeoapi.provider.elasticsearch_.ElasticsearchProvider
+        :returns: pygeoapi.provider.opensearch_.OpenSearchProvider
         """
 
         super().__init__(provider_def)
 
         self.select_properties = []
 
-        self.es_host, self.index_name = self.data.rsplit('/', 1)
+        self.os_host, self.index_name = self.data.rsplit('/', 1)
 
-        LOGGER.debug('Setting Elasticsearch properties')
+        LOGGER.debug('Setting OpenSearch properties')
 
-        LOGGER.debug(f'host: {self.es_host}')
+        LOGGER.debug(f'host: {self.os_host}')
         LOGGER.debug(f'index: {self.index_name}')
 
-        LOGGER.debug('Connecting to Elasticsearch')
-        self.es = Elasticsearch(self.es_host)
-        if not self.es.ping():
-            msg = f'Cannot connect to Elasticsearch: {self.es_host}'
+        LOGGER.debug('Connecting to OpenSearch')
+        self.os_ = OpenSearch(self.os_host, verify_certs=0)
+        if not self.os_.ping():
+            msg = f'Cannot connect to OpenSearch: {self.os_host}'
             LOGGER.error(msg)
             raise ProviderConnectionError(msg)
 
-        LOGGER.debug('Determining ES version')
-        v = self.es.info()['version']['number'][:3]
-        if float(v) < 8:
-            msg = 'only ES 8+ supported'
-            LOGGER.error(msg)
-            raise ProviderConnectionError(msg)
+        LOGGER.debug('Determining OpenSearch version')
+        v = self.os_.info()['version']['number'][:3]
+        LOGGER.debug(f'OpenSearch version: {v}')
 
         LOGGER.debug('Grabbing field information')
         try:
             self.get_fields()
-        except exceptions.NotFoundError as err:
+        except Exception as err:
             LOGGER.error(err)
             raise ProviderQueryError(err)
 
@@ -99,8 +96,8 @@ class ElasticsearchProvider(BaseProvider):
         :returns: dict of fields
         """
         if not self._fields:
-            ii = self.es.indices.get(index=self.index_name,
-                                     allow_no_indices=False)
+            ii = self.os_.indices.get(index=self.index_name,
+                                      allow_no_indices=False)
 
             LOGGER.debug(f'Response: {ii}')
             try:
@@ -119,35 +116,19 @@ class ElasticsearchProvider(BaseProvider):
                 LOGGER.warning('could not get fields; returning empty set')
                 return {}
 
-            self._fields = self.get_nested_fields(p, self._fields)
+            for k, v in p['properties'].items():
+                if 'type' in v:
+                    if v['type'] == 'text':
+                        self._fields[k] = {'type': 'string'}
+                    elif v['type'] == 'date':
+                        self._fields[k] = {'type': 'string', 'format': 'date'}
+                    elif v['type'] in ('float', 'long'):
+                        self._fields[k] = {'type': 'number',
+                                           'format': v['type']}
+                    else:
+                        self._fields[k] = {'type': v['type']}
+
         return self._fields
-
-    def get_nested_fields(self, properties, fields, prev_field=None):
-        """
-        Get Elasticsearch fields (names, types) for all nested properties
-
-        :param properties: `dict` of Elasticsearch mappings properties
-        :param fields: `dict` of fields in the current iteration
-        :param prev_field: name of the parent field
-
-        :returns: dict of fields
-        """
-        for k, v in properties['properties'].items():
-
-            cur_field = k if prev_field is None else f'{prev_field}.{k}'
-
-            if isinstance(v, dict) and 'properties' in v:
-                fields = self.get_nested_fields(v, fields, cur_field)
-            else:
-                if v['type'] == 'text':
-                    fields[cur_field] = {'type': 'string'}
-                elif v['type'] == 'date':
-                    fields[cur_field] = {'type': 'string', 'format': 'date'}
-                elif v['type'] in ('float', 'long'):
-                    fields[cur_field] = {'type': 'number', 'format': v['type']}
-                else:
-                    fields[cur_field] = {'type': v['type']}
-        return fields
 
     @crs_transform
     def query(self, offset=0, limit=10, resulttype='results',
@@ -155,7 +136,7 @@ class ElasticsearchProvider(BaseProvider):
               select_properties=[], skip_geometry=False, q=None,
               filterq=None, **kwargs):
         """
-        query Elasticsearch index
+        query OpenSearch index
 
         :param offset: starting record to return (default 0)
         :param limit: number of records to return (default 10)
@@ -263,7 +244,7 @@ class ElasticsearchProvider(BaseProvider):
 
                 if (self.fields[sp]['type'] == 'string'
                         and self.fields[sp].get('format') != 'date'):
-                    LOGGER.debug('setting ES .raw on property')
+                    LOGGER.debug('setting OpenSearch .raw on property')
                     sort_property = f'{self.mask_prop(sp)}.raw'
                 else:
                     sort_property = self.mask_prop(sp)
@@ -311,15 +292,15 @@ class ElasticsearchProvider(BaseProvider):
             except KeyError:
                 query['_source'] = {'excludes': ['geometry']}
         try:
-            LOGGER.debug('querying Elasticsearch')
+            LOGGER.debug('querying OpenSearch')
             if filterq:
                 LOGGER.debug(f'adding cql object: {filterq.json()}')
                 query = update_query(input_query=query, cql=filterq)
             LOGGER.debug(json.dumps(query, indent=4))
 
-            LOGGER.debug('Testing for ES scrolling')
+            LOGGER.debug('Testing for OpenSearch scrolling')
             if offset + limit > 10000:
-                gen = helpers.scan(client=self.es, query=query,
+                gen = helpers.scan(client=self.os_, query=query,
                                    preserve_order=True,
                                    index=self.index_name)
                 results = {'hits': {'total': limit, 'hits': []}}
@@ -335,21 +316,15 @@ class ElasticsearchProvider(BaseProvider):
                 matched = len(results['hits']['hits']) + offset
                 returned = len(results['hits']['hits'])
             else:
-                es_results = self.es.search(index=self.index_name,
-                                            from_=offset, size=limit, **query)
+                es_results = self.os_.search(index=self.index_name,
+                                             from_=offset, size=limit,
+                                             body=query)
                 results = es_results
                 matched = es_results['hits']['total']['value']
                 returned = len(es_results['hits']['hits'])
 
-        except exceptions.ConnectionError as err:
-            LOGGER.error(err)
-            raise ProviderConnectionError()
-        except exceptions.RequestError as err:
-            LOGGER.error(err)
-            raise ProviderQueryError()
-        except exceptions.NotFoundError as err:
-            LOGGER.error(err)
-            raise ProviderQueryError()
+        except ValueError:
+            pass
 
         feature_collection['numberMatched'] = matched
 
@@ -360,7 +335,7 @@ class ElasticsearchProvider(BaseProvider):
 
         LOGGER.debug('serializing features')
         for feature in results['hits']['hits']:
-            feature_ = self.esdoc2geojson(feature)
+            feature_ = self.osdoc2geojson(feature)
             feature_collection['features'].append(feature_)
 
         return feature_collection
@@ -368,7 +343,7 @@ class ElasticsearchProvider(BaseProvider):
     @crs_transform
     def get(self, identifier, **kwargs):
         """
-        Get ES document by id
+        Get OpenSearch document by id
 
         :param identifier: feature id
 
@@ -377,11 +352,11 @@ class ElasticsearchProvider(BaseProvider):
 
         try:
             LOGGER.debug(f'Fetching identifier {identifier}')
-            result = self.es.get(index=self.index_name, id=identifier)
+            result = self.os_.get(index=self.index_name, id=identifier)
             LOGGER.debug('Serializing feature')
-            feature_ = self.esdoc2geojson(result)
+            feature_ = self.osdoc2geojson(result)
         except Exception as err:
-            LOGGER.debug(f'Not found via ES id query: {err}')
+            LOGGER.debug(f'Not found via OpenSearch id query: {err}')
             LOGGER.debug('Trying via a real query')
 
             query = {
@@ -398,13 +373,13 @@ class ElasticsearchProvider(BaseProvider):
 
             LOGGER.debug(f'Query: {query}')
             try:
-                result = self.es.search(index=self.index_name, **query)
+                result = self.os_search(index=self.index_name, **query)
                 if len(result['hits']['hits']) == 0:
                     LOGGER.error(err)
                     raise ProviderItemNotFoundError(err)
                 LOGGER.debug('Serializing feature')
-                feature_ = self.esdoc2geojson(result['hits']['hits'][0])
-            except exceptions.RequestError as err2:
+                feature_ = self.osdoc2geojson(result['hits']['hits'][0])
+            except Exception as err2:
                 LOGGER.error(err2)
                 raise ProviderItemNotFoundError(err2)
         except Exception as err:
@@ -430,7 +405,8 @@ class ElasticsearchProvider(BaseProvider):
             json_data["id"] = identifier
 
         LOGGER.debug(f'Inserting data with identifier {identifier}')
-        _ = self.es.index(index=self.index_name, id=identifier, body=json_data)
+        _ = self.os_.index(index=self.index_name, id=identifier,
+                           body=json_data)
         LOGGER.debug('Item added')
 
         return identifier
@@ -449,7 +425,7 @@ class ElasticsearchProvider(BaseProvider):
         identifier, json_data = self._load_and_prepare_item(
             item, identifier, raise_if_exists=False)
 
-        _ = self.es.index(index=self.index_name, id=identifier, body=json_data)
+        _ = self.os_index(index=self.index_name, id=identifier, body=json_data)
 
         return True
 
@@ -463,15 +439,14 @@ class ElasticsearchProvider(BaseProvider):
         """
 
         LOGGER.debug(f'Deleting item {identifier}')
-        _ = self.es.delete(index=self.index_name, id=identifier)
+        _ = self.os_delete(index=self.index_name, id=identifier)
 
         return True
 
-    def esdoc2geojson(self, doc):
+    def osdoc2geojson(self, doc):
         """
-        generate GeoJSON `dict` from ES document
-
-        :param doc: `dict` of ES document
+        generate GeoJSON `dict` from OpenSearch document
+        :param doc: `dict` of OpenSearch document
 
         :returns: GeoJSON `dict`
         """
@@ -505,8 +480,8 @@ class ElasticsearchProvider(BaseProvider):
                 try:
                     feature_thinned['properties'][p] = feature_['properties'][p]  # noqa
                 except KeyError as err:
-                    msg = f'Property missing {err}; continuing'
-                    LOGGER.warning(msg)
+                    LOGGER.error(err)
+                    raise ProviderQueryError()
 
         if feature_thinned:
             return feature_thinned
@@ -515,7 +490,7 @@ class ElasticsearchProvider(BaseProvider):
 
     def mask_prop(self, property_name):
         """
-        generate property name based on ES backend setup
+        generate property name based on OpenSearch backend setup
 
         :param property_name: property name
 
@@ -541,11 +516,11 @@ class ElasticsearchProvider(BaseProvider):
         return all_properties
 
     def __repr__(self):
-        return f'<ElasticsearchProvider> {self.data}'
+        return f'<OpenSearchProvider> {self.data}'
 
 
-class ElasticsearchCatalogueProvider(ElasticsearchProvider):
-    """Elasticsearch Provider"""
+class OpenSearchCatalogueProvider(OpenSearchProvider):
+    """OpenSearch Provider"""
 
     def __init__(self, provider_def):
         super().__init__(provider_def)
@@ -582,10 +557,10 @@ class ElasticsearchCatalogueProvider(ElasticsearchProvider):
         return records
 
     def __repr__(self):
-        return f'<ElasticsearchCatalogueProvider> {self.data}'
+        return f'<OpenSearchCatalogueProvider> {self.data}'
 
 
-class ESQueryBuilder:
+class OpenSearchQueryBuilder:
     def __init__(self):
         self._operation = None
         self.must_value = {}
@@ -759,7 +734,7 @@ def _build_query(q, cql):
 
 def update_query(input_query: Dict, cql: CQLModel):
     s = Search.from_dict(input_query)
-    query = ESQueryBuilder()
+    query = OpenSearchQueryBuilder()
     output_query = _build_query(query, cql)
     s = s.query(output_query)
 

@@ -3,7 +3,7 @@
 # Authors: Benjamin Webb <benjamin.miller.webb@gmail.com>
 # Authors: Tom Kralidis <tomkralidis@gmail.com>
 #
-# Copyright (c) 2023 Benjamin Webb
+# Copyright (c) 2024 Benjamin Webb
 # Copyright (c) 2022 Tom Kralidis
 #
 # Permission is hereby granted, free of charge, to any person
@@ -32,6 +32,7 @@
 from json.decoder import JSONDecodeError
 import logging
 from requests import Session
+from urllib.parse import urlparse
 
 from pygeoapi.config import get_config
 from pygeoapi.provider.base import (
@@ -209,6 +210,11 @@ class SensorThingsProvider(BaseProvider):
             try:
                 LOGGER.debug('Fetching next set of values')
                 next_ = response['@iot.nextLink']
+
+                # Ensure we only use provided network location
+                next_ = next_.replace(urlparse(next_).netloc,
+                                      urlparse(self.data).netloc)
+
                 response = self._get_response(next_)
                 v.extend(response['value'])
             except (ProviderConnectionError, KeyError):
@@ -517,6 +523,10 @@ class SensorThingsProvider(BaseProvider):
         else:
             LOGGER.debug('Using default @iot.id for id field')
             self.id_field = '@iot.id'
+
+        # Custom expand
+        if provider_def.get('expand'):
+            EXPAND[self.entity] = provider_def['expand']
 
         # Create intra-links
         self.intralink = provider_def.get('intralink', False)
