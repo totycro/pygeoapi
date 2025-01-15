@@ -642,8 +642,7 @@ class OracleProvider(BaseProvider):
             extra_params=extra_params,
         )
 
-        placeholders = ["#HINTS#", "#JOIN#", "#WHERE#"]
-        for placeholder in placeholders:
+        for placeholder in ["#HINTS#", "#JOIN#", "#WHERE#"]:
             sql_query = sql_query.replace(placeholder, "")
 
         return sql_query, bind_variables
