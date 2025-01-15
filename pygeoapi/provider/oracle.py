@@ -646,8 +646,7 @@ class OracleProvider(BaseProvider):
         for placeholder in placeholders:
             sql_query = sql_query.replace(placeholder, "")
 
-
-        return sql_query, bind_variables 
+        return sql_query, bind_variables
 
     def query(
         self,
@@ -737,7 +736,7 @@ class OracleProvider(BaseProvider):
             bind_variables = {**where_dict["properties"]}
 
             # Default values for the process_query function (sql_manipulator)
-            default_values = {
+            query_args = {
                 "offset": offset,
                 "limit": limit,
                 "resulttype": resulttype,
@@ -755,7 +754,7 @@ class OracleProvider(BaseProvider):
 
             # Apply the SQL manipulation plugin
             extra_params["geom"] = self.geom
-            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(
+            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(   # noqa: E501
                 db, sql_query, bind_variables, extra_params, **query_args
             )
 
@@ -859,7 +858,7 @@ class OracleProvider(BaseProvider):
             bind_variables = {**where_dict["properties"], **paging_bind}
 
             # Apply the SQL manipulation plugin
-            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(
+            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(   # noqa: E501
                 db, sql_query, bind_variables, extra_params, **query_args
             )
 
