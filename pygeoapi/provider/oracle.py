@@ -613,7 +613,7 @@ class OracleProvider(BaseProvider):
 
         return srid
 
-    def _apply_sql_manipulator(
+    def _process_query_with_sql_manipulator_sup(
         self, db, sql_query, bind_variables, extra_params, **query_args
     ):
         """
@@ -633,7 +633,7 @@ class OracleProvider(BaseProvider):
         manipulation_class = _class_factory(self.sql_manipulator)
 
         # Pass all arguments to the process_query method
-        return manipulation_class.process_query(
+        sql_query, bind_variables = manipulation_class.process_query(
             db=db,
             sql_query=sql_query,
             bind_variables=bind_variables,
@@ -641,6 +641,13 @@ class OracleProvider(BaseProvider):
             **query_args,
             extra_params=extra_params,
         )
+
+        placeholders = ["#HINTS#", "#JOIN#", "#WHERE#"]
+        for placeholder in placeholders:
+            sql_query = sql_query.replace(placeholder, "")
+
+
+        return sql_query, bind_variables 
 
     def query(
         self,
@@ -731,37 +738,26 @@ class OracleProvider(BaseProvider):
 
             # Default values for the process_query function (sql_manipulator)
             default_values = {
-                "offset": None,
-                "limit": None,
-                "resulttype": None,
-                "bbox": None,
-                "datetime_": None,
-                "properties": [],
-                "sortby": [],
-                "skip_geometry": None,
-                "select_properties": [],
-                "crs_transform_spec": None,
-                "q": None,
-                "language": None,
-                "filterq": None,
-            }
-
-            # Prepare the arguments dynamically
-            # Use defaults where variables are not defined
-            query_args = {
-                key: locals().get(key, default) for key, default
-                in default_values.items()
+                "offset": offset,
+                "limit": limit,
+                "resulttype": resulttype,
+                "bbox": bbox,
+                "datetime_": datetime_,
+                "properties": properties,
+                "sortby": sortby,
+                "skip_geometry": skip_geometry,
+                "select_properties": select_properties,
+                "crs_transform_spec": crs_transform_spec,
+                "q": q,
+                "language": language,
+                "filterq": filterq,
             }
 
             # Apply the SQL manipulation plugin
             extra_params["geom"] = self.geom
-            sql_query, bind_variables = self._apply_sql_manipulator(
+            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(
                 db, sql_query, bind_variables, extra_params, **query_args
             )
-
-            # Clean up placeholders that aren't used by the
-            # manipulation class.
-            sql_query = _cleanup_placeholders(sql_query)
 
             try:
                 cursor.execute(sql_query, bind_variables)
@@ -863,13 +859,9 @@ class OracleProvider(BaseProvider):
             bind_variables = {**where_dict["properties"], **paging_bind}
 
             # Apply the SQL manipulation plugin
-            sql_query, bind_variables = self._apply_sql_manipulator(
+            sql_query, bind_variables = self._process_query_with_sql_manipulator_sup(
                 db, sql_query, bind_variables, extra_params, **query_args
             )
-
-            # Clean up placeholders that aren't used by the
-            # manipulation class.
-            sql_query = _cleanup_placeholders(sql_query)
 
             LOGGER.debug(f"SQL Query: {sql_query}")
             LOGGER.debug(f"Bind variables: {bind_variables}")
@@ -1368,13 +1360,6 @@ class OracleProvider(BaseProvider):
             obj.SDO_ORDINATES.extend(coord)
 
         return obj
-
-
-def _cleanup_placeholders(sql_query):
-    placeholders = ["#HINTS#", "#JOIN#", "#WHERE#"]
-    for placeholder in placeholders:
-        sql_query = sql_query.replace(placeholder, "")
-    return sql_query
 
 
 def _class_factory(
