@@ -627,6 +627,8 @@ class OracleProvider(BaseProvider):
         :return: Processed SQL query and bind variables
         """
         if not self.sql_manipulator:
+            for placeholder in ["#HINTS#", "#JOIN#", "#WHERE#"]:
+                sql_query = sql_query.replace(placeholder, "")
             return sql_query, bind_variables
 
         LOGGER.debug(f"sql_manipulator: {self.sql_manipulator}")
